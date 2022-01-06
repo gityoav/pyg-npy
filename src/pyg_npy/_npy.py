@@ -17,7 +17,7 @@ __all__ = ['NpyAppendArray', 'pd_to_npy', 'pd_read_npy', 'np_save']
 class NpyAppendArray:
     """
     appends/writes numpy arrays to file.
-    An improved version of https://github.com/xor2k/npy-append-array
+    A modified version of https://github.com/xor2k/npy-append-array
 
     :Example:
     ----------------
@@ -43,13 +43,21 @@ class NpyAppendArray:
     >>>         npa.append(arr)
     >>>     assert np.load(fname).shape == (200, 10)        
     """
-    def __init__(self, filename, mode = 'a'):
+    def __init__(self, filename):
         self.filename = filename
         self.fp = None
         self.__is_init = None
-        self.mode = mode[0].lower()
-        if self.mode not in 'aw':
-            raise ValueError('mode can be either append or write')
+
+    def make_file_appendable(self):
+        """
+        if format of file is not amenable to append, resave it 
+        """
+        if os.path.isfile(self.filename):
+            with open(self.filename, mode="rb+") as fp:
+                magic = np.lib.format.read_magic(fp)
+        if magic != (2, 0):
+            arr = np.load(self.filename)
+            self.write(arr)
 
     def __create_header_bytes(self, spare_space = True):
         from struct import pack
@@ -152,9 +160,7 @@ class NpyAppendArray:
 
     def append(self, arr):
         if not arr.flags.c_contiguous:
-            arr = np.ascontiguousarray(arr)
-            if not arr.flags.c_contiguous:
-                raise NotImplementedError("ndarray needs to be c_contiguous")
+            raise NotImplementedError("ndarray needs to be c_contiguous")
 
         if self.__is_init is None:
             self.__init()
@@ -182,12 +188,6 @@ class NpyAppendArray:
         arr.tofile(self.fp)
 
         self.__write_header()
-
-    def save(self, arr):
-        if self.mode == 'a':
-            return self.append(arr)
-        elif self.mode == 'w':
-            return self.write(arr)
         
     def close(self):
         if self.__is_init:
