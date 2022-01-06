@@ -3,23 +3,52 @@ from _collections_abc import dict_keys, dict_values
 import pandas as pd
 import numpy as np
 import os.path
+import json
 from io import BytesIO, SEEK_END, SEEK_SET
+import datetime
 
 _npy = '.npy'
 
 __all__ = ['pd_to_npy', 'pd_read_npy', 'np_save']
 
 
+
 class NpyAppendArray:
+    """
+    appends/writes numpy arrays to file.
+    An improved version of https://github.com/xor2k/npy-append-array
+
+    :Example:
+    ----------------
+    >>> fname = 'c:/temp/temp.npy'
+
+    >>> ## saving
+    >>> arr = np.random.normal(0,1, (100,10))
+    >>> with NpyAppendArray(fname, 'w') as npa:
+    >>>     npa.save(arr)
+    >>>     npa.save(arr)
+    >>> assert np.load(fname).shape == (100, 10)
+
+    >>> ## appending
+    >>> with NpyAppendArray(fname, 'a') as npa:
+    >>>     npa.save(arr)
+    >>>     npa.save(arr)
+    >>> assert np.load(fname).shape == (300, 10)
+
+    >>> ## saving and then appending explicitly, independent of mode:
+    >>> for mode in 'aw':
+    >>>     with NpyAppendArray(fname, mode) as npa:
+    >>>         npa.write(arr)
+    >>>         npa.append(arr)
+    >>>     assert np.load(fname).shape == (200, 10)        
+    """
     def __init__(self, filename, mode = 'a'):
         self.filename = filename
         self.fp = None
-        self.__is_init = False
+        self.__is_init = None
         self.mode = mode[0].lower()
         if self.mode not in 'aw':
             raise ValueError('mode can be either append or write')
-        if os.path.isfile(filename) and mode == 'a':
-            self.__init()
 
     def __create_header_bytes(self, spare_space = True):
         from struct import pack
@@ -46,12 +75,14 @@ class NpyAppendArray:
         try: 
             return self.__init_from_existing()
         except NotImplementedError:
+            ## we load and re-save the file, this time using NPA and extended headers to allow appending
             arr = np.load(self.filename)
             self.write(arr)
             return self.__init_from_existing()
         
     def __init_from_existing(self):
         if not os.path.isfile(self.filename):
+            self.__is_init = False
             return
 
         self.fp = open(self.filename, mode="rb+")
@@ -109,6 +140,9 @@ class NpyAppendArray:
         fp.seek(0, SEEK_END)
         
     def write(self, arr):
+        """
+        writes an array to self.filename, overwriting existing file if there
+        """
         fp = self.fp  = open(self.filename, mode="wb")
         self.shape, self.fortran_order, self.dtype = list(arr.shape), False, arr.dtype
         fp.write(self.__create_header_bytes())
@@ -119,8 +153,11 @@ class NpyAppendArray:
         if not arr.flags.c_contiguous:
             raise NotImplementedError("ndarray needs to be c_contiguous")
 
-        if not self.__is_init:
-            return self.write(arr)
+        if self.__is_init is None:
+            self.__init()
+        
+        if self.__is_init is False:
+            self.write(arr)
 
         if arr.dtype != self.dtype:
             raise TypeError("incompatible ndarrays types %s and %s" % (
@@ -165,6 +202,7 @@ class NpyAppendArray:
         self.__del__()
 
 
+
 def is_rng(value):
     return isinstance(value, (list, tuple, range, dict_keys, dict_values, zip))
 
@@ -200,7 +238,7 @@ def np_save(path, value, mode = 'w'):
         f.save(value)
     return path
 
-def pd_to_npy(value, path, append = False):
+def pd_to_npy(value, path, mode = 'w', check = True):
     """
     writes a pandas DataFrame/series to a collection of numpy files as columns.
     Support append rather than overwrite
@@ -228,7 +266,7 @@ def pd_to_npy(value, path, append = False):
     >>> import pandas as pd
     >>> from pyg_base import *
     >>> path = 'c:/temp/test.npy'
-    >>> value = pd.DataFrame([[1,2],[3,4]], drange(-1), ['a', 'b'])
+    >>> value = pd.DataFrame(np.random.normal(0,1,(100,10)), drange(-99), list('abcdefghij'))
     >>> res = pd_to_npy(value, path)
 
     >>> res
@@ -247,20 +285,42 @@ def pd_to_npy(value, path, append = False):
         df = value
         res['columns'] = columns = list(df.columns)
 
-    df = df.reset_index()
-    res['index'] = list(df.columns)[:-len(columns)]    
+    res['index'] = df.index.name
     if path.endswith(_npy):
-        path = path[:-len(_npy)]
+        path = path[:-len(_npy)]    
     
-    for col in df.columns:
-        a = df[col].values
-        fname = path +'/%s%s'%(col, _npy)
-        np_save(fname, a, append)
-    return res
+    jname = path +'/%s%s'%('metadata', '.json')    
+    if check and mode == 'a' and os.path.isfile(jname):
+        with open(jname, 'r') as fp:
+            j = json.load(fp)
+        assert j['columns'] == res['columns'], 'column names mismatch %s stored vs %s' %(j['columns'], res['columns'])
+        assert j['index'] == res['index'], 'index name mismatch %s stored vs %s' %(j['index'], res['index'])
+        latest = j.get('latest')
+        if latest:
+            if isinstance(df.index, pd.DatetimeIndex):
+                latest = datetime.datetime.utcfromtimestamp(latest)
+            df = df[df.index > latest]
+    else:
+        j = res
 
-pd_to_npy.output = ['path', 'columns', 'index']
+    if len(df):
+        latest = df.index[-1]
+        if isinstance(latest, (np.int64, np.int32, np.int16)):
+            latest = int(latest)
+        elif isinstance(df.index, pd.DatetimeIndex):
+            latest = float(np.datetime64(latest).astype('uint64') / 1e6) ## utc
+        j['latest'] = latest
+    dname = path +'/%s%s'%('data', _npy)
+    iname = path +'/%s%s'%('index', _npy)
+    np_save(dname, df.values, mode)
+    np_save(iname, df.index.values, mode)
+    with open(jname, 'w') as fp:
+        json.dump(j, fp)
+    return j
 
-def pd_read_npy(path, columns, index):
+pd_to_npy.output = ['path', 'columns', 'index', 'latest']
+
+def pd_read_npy(path, columns = None, index = None, latest = None):
     """
     reads a pandas dataframe/series from a path directory containing npy files with col.npy and idx.npy names
 
@@ -280,8 +340,18 @@ def pd_read_npy(path, columns, index):
     """
     if path.endswith(_npy):
         path = path[:-len(_npy)]
-    data = {col : np.load(path +'/%s%s'%(col, _npy)) for col in as_list(columns) + as_list(index)}
-    res = pd.DataFrame(data).set_index(index)
-    if isinstance(columns, str): # it is a series
-        res = res[columns]
+    data = np.load(path +'/%s%s'%('data', _npy))
+    index_data = np.load(path +'/%s%s'%('index', _npy))
+    jname = path +'/%s%s'%('metadata', '.json')
+    if os.path.isfile(jname):
+        with open(jname, 'r') as fp:
+            j = json.load(fp)
+        columns = columns or j['columns']
+        index = index or j['index']    
+    res = pd.DataFrame(data, index_data)
+    res.index.name = index
+    if isinstance(columns, str):
+        res = res[0]
+    else:
+        res.columns = columns
     return res
