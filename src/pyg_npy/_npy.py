@@ -8,8 +8,9 @@ from io import BytesIO, SEEK_END, SEEK_SET
 import datetime
 
 _npy = '.npy'
+_json = '.json'
 
-__all__ = ['pd_to_npy', 'pd_read_npy', 'np_save']
+__all__ = ['NpyAppendArray', 'pd_to_npy', 'pd_read_npy', 'np_save']
 
 
 
@@ -251,9 +252,15 @@ def pd_to_npy(value, path, mode = 'w', check = True):
     path: str
         location of the form c:/test/file.npy
 
-    append: bool
-        if True, will append to existing files rather than overwrite
+    mode: str 'a/w'
+        if 'a', will append to existing files rather than overwrite
+        if 'w', will overwrite
 
+    check: bool
+        if True and we are appending to an existing file, will check that:
+            - column names match
+            - index name match
+            - will only save data with INDEX GREATER than last index value of existing file
 
     :Returns:
     ---------
@@ -264,17 +271,54 @@ def pd_to_npy(value, path, mode = 'w', check = True):
     ----------
     >>> import numpy as np   
     >>> import pandas as pd
-    >>> from pyg_base import *
+    >>> from pyg_base import drange, eq
+    >>> from pyg_npy import *
     >>> path = 'c:/temp/test.npy'
     >>> value = pd.DataFrame(np.random.normal(0,1,(100,10)), drange(-99), list('abcdefghij'))
     >>> res = pd_to_npy(value, path)
 
     >>> res
-    >>> {'path': 'c:/temp/test.npy', 'columns': ['a', 'b'], 'index': ['index']}
-
-    >>> df = pd_read_npy(**res)    
+    >>> {'path': 'c:/temp/test.npy',
+    >>>  'columns': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'],
+    >>>  'index': None,
+    >>>  'latest': 1641427200.0} ## This is in UNIX posix time
+    
+    >>> df = pd_read_npy('c:/temp/test.npy')    
     >>> assert eq(df, value)
     
+    :Underneath the hood:
+    --------------------
+    The numpy df.values array is here:
+    
+    >>> assert np.load('c:/temp/test/data.npy').shape == value.shape
+    
+    The index array is here:
+    
+    >>> np.load('c:/temp/test/index.npy').shape == (len(value),)
+
+    The metadata is here:
+    
+    >>> with open('c:/temp/test/metadata.json') as f:
+    >>>    j = json.load(f)
+    >>> j
+    >>> {'path': 'c:/temp/test.npy',
+    >>>      'columns': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'],
+    >>>      'index': None,
+    >>>      'latest': 1641427200.0}
+    
+
+     :Example: appending SAME data with/out check
+    ------------------------------
+    >>> res = pd_to_npy(value, path, 'a') # this will do nothing as new data is PRE res['latest']
+    >>> df = pd_read_npy('c:/temp/test.npy')    
+    >>> assert eq(df, value)
+    
+    ## now we drop check...
+
+    >>> res = pd_to_npy(value, path, mode = 'a', check = False) 
+    >>> df = pd_read_npy('c:/temp/test.npy')    
+    >>> assert eq(df, pd.concat([value, value]))
+ 
     """
     res = dict(path = path)
     if isinstance(value, pd.Series):
@@ -289,7 +333,7 @@ def pd_to_npy(value, path, mode = 'w', check = True):
     if path.endswith(_npy):
         path = path[:-len(_npy)]    
     
-    jname = path +'/%s%s'%('metadata', '.json')    
+    jname = path +'/%s%s'%('metadata', _json)    
     if check and mode == 'a' and os.path.isfile(jname):
         with open(jname, 'r') as fp:
             j = json.load(fp)
@@ -322,7 +366,7 @@ pd_to_npy.output = ['path', 'columns', 'index', 'latest']
 
 def pd_read_npy(path, columns = None, index = None, latest = None):
     """
-    reads a pandas dataframe/series from a path directory containing npy files with col.npy and idx.npy names
+    reads a pandas dataframe/series from a path directory containing npy files
 
     Parameters
     ----------
@@ -342,7 +386,7 @@ def pd_read_npy(path, columns = None, index = None, latest = None):
         path = path[:-len(_npy)]
     data = np.load(path +'/%s%s'%('data', _npy))
     index_data = np.load(path +'/%s%s'%('index', _npy))
-    jname = path +'/%s%s'%('metadata', '.json')
+    jname = path +'/%s%s'%('metadata', _json)
     if os.path.isfile(jname):
         with open(jname, 'r') as fp:
             j = json.load(fp)

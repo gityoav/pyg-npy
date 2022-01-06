@@ -1,6 +1,6 @@
 package:
     name: pyg-npy
-    version: 0.0.1
+    version: 0.0.2
 
 source:
     path: ../src
@@ -14,11 +14,9 @@ requirements:
     build:
         - numpy             >=1.19.1
         - pandas            >=1.1.0
-        - npy-append-array  >=0.9.13
     run:
         - numpy             >=1.19.1
         - pandas            >=1.1.0
-        - npy-append-array  >=0.9.13
 about:
     home: https://github.com/gityoav/pyg-npy
     license: GNU

@@ -2,8 +2,11 @@
 
 pip install from https://pypi.org/project/pyg-npy/
 
+conda install from https://anaconda.org/yoavgit/pyg-npy
+
 A quick utility to save dataframes as npy files. 
-It supports append and checks lightly on column names matching and index. 
+
+It supports append and checks lightly on column names matching and index.
 
 For simple read/write, it is about 5-10 times faster than parquet writing or pystore
 For append, it is marginally slower than pystore 
@@ -17,7 +20,6 @@ store = pystore.store('mydatastore')
 collection = store.collection('NASDAQ')
 arr = np.random.normal(0,1,(100,10))
 df = pd.DataFrame(arr, columns = list('abcdefghij'))
-
 
 ### write
 %timeit collection.write('TEST', df, overwrite = True)
