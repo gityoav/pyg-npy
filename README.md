@@ -15,11 +15,15 @@ For append, it is marginally slower than pystore
 import numpy as np; import pandas as pd
 from pyg_npy import pd_to_npy, pd_read_npy
 import pystore
+import datetime
+
 pystore.set_path("c:/temp/pystore")
 store = pystore.store('mydatastore')
 collection = store.collection('NASDAQ')
 arr = np.random.normal(0,1,(100,10))
 df = pd.DataFrame(arr, columns = list('abcdefghij'))
+dates = [datetime.datetime(2020,1,1) + datetime.timedelta(i) for i in range(-10000,0)]
+ts = pd.DataFrame(np.random.normal(0,1,(10000,10)), dates, columns = list('abcdefghij'))
 
 ### write
 %timeit collection.write('TEST', df, overwrite = True)
@@ -43,7 +47,14 @@ df = pd.DataFrame(arr, columns = list('abcdefghij'))
 847 µs ± 39.8 µs per loop (mean ± std. dev. of 7 runs, 1000 loops each)
 
 ### append
-%timeit pd_to_npy(df, 'c:/temp/test.npy', mode = 'a', check = False)
-12.7 ms ± 467 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+# because we need to append data with increasing index value, we use this:
+
+collection.write('TEST2', ts.iloc[:100], overwrite = True)
+%time len([collection.append('TEST2', ts.iloc[i*100: i*100+100], npartitions=2) for i in range(1,100)])
+Wall time: 12.1 s
+
+pd_to_npy(ts.iloc[:100], 'c:/temp/test.npy')
+%time len([pd_to_npy(ts.iloc[i*100: i*100+100], 'c:/temp/test.npy', 'a', True) for i in range(1,100)])
+Wall time: 2.14 s
 
 ```
