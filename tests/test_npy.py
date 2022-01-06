@@ -29,6 +29,14 @@ def test_np_save():
     assert res.shape == (600,10)
 
 
+def test_save_works_with_non_contiguous_arrays():
+    df = pd.DataFrame([[1,2], [3,4]])    
+    arr = df.values
+    assert not arr.flags.c_contiguous 
+    np_save('c:/temp/test.npy', arr, 'w')
+    np_save('c:/temp/test.npy', arr, 'a')
+    assert np.load('c:/temp/test.npy').shape == (4,2)
+
 def test_np_save_with_initial_bad_write():
     fname = path = 'c:/temp/a.npy'
     value = np.random.normal(0,1,(100,10))
