@@ -1,7 +1,6 @@
 import os
 import shutil
 import re
-from pyg_base._logger import logger
 import subprocess
 import csv
 

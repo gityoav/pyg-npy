@@ -13,35 +13,18 @@ _json = '.json'
 __all__ = ['NpyAppendArray', 'pd_to_npy', 'pd_read_npy', 'np_save']
 
 
-
 class NpyAppendArray:
     """
     appends/writes numpy arrays to file.
-    A modified version of https://github.com/xor2k/npy-append-array
 
     :Example:
     ----------------
     >>> fname = 'c:/temp/temp.npy'
-
-    >>> ## saving
     >>> arr = np.random.normal(0,1, (100,10))
-    >>> with NpyAppendArray(fname, 'w') as npa:
-    >>>     npa.save(arr)
-    >>>     npa.save(arr)
-    >>> assert np.load(fname).shape == (100, 10)
-
-    >>> ## appending
-    >>> with NpyAppendArray(fname, 'a') as npa:
-    >>>     npa.save(arr)
-    >>>     npa.save(arr)
-    >>> assert np.load(fname).shape == (300, 10)
-
-    >>> ## saving and then appending explicitly, independent of mode:
-    >>> for mode in 'aw':
-    >>>     with NpyAppendArray(fname, mode) as npa:
-    >>>         npa.write(arr)
-    >>>         npa.append(arr)
-    >>>     assert np.load(fname).shape == (200, 10)        
+    >>> with NpyAppendArray(fname) as npa:
+    >>>     npa.write(arr)
+    >>>     npa.append(arr)    
+    >>> assert np.load(fname).shape == (200, 10)
     """
     def __init__(self, filename):
         self.filename = filename
@@ -80,16 +63,8 @@ class NpyAppendArray:
 
         return io.getbuffer()
 
-    def __init(self):
-        try: 
-            return self.__init_from_existing()
-        except NotImplementedError:
-            ## we load and re-save the file, this time using NPA and extended headers to allow appending
-            arr = np.load(self.filename)
-            self.write(arr)
-            return self.__init_from_existing()
         
-    def __init_from_existing(self):
+    def __init(self):
         if not os.path.isfile(self.filename):
             self.__is_init = False
             return
@@ -205,7 +180,6 @@ class NpyAppendArray:
         self.__del__()
 
 
-
 def is_rng(value):
     return isinstance(value, (list, tuple, range, dict_keys, dict_values, zip))
 
@@ -237,8 +211,16 @@ def np_save(path, value, mode = 'w'):
         if value is to be appended rather than overwrite        
     """
     mkdir(path)
-    with NpyAppendArray(path, mode) as f:
-        f.save(value)
+    
+    if not value.flags.c_contiguous:
+        value = np.ascontiguousarray(value)
+    
+    with NpyAppendArray(path) as f:
+        if mode == 'a':
+            f.make_file_appendable()
+            f.append(value)
+        elif mode == 'w':
+            f.write(value)
     return path
 
 def pd_to_npy(value, path, mode = 'w', check = True):
