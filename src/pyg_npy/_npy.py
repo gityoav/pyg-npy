@@ -38,9 +38,9 @@ class NpyAppendArray:
         if os.path.isfile(self.filename):
             with open(self.filename, mode="rb+") as fp:
                 magic = np.lib.format.read_magic(fp)
-        if magic != (2, 0):
-            arr = np.load(self.filename)
-            self.write(arr)
+            if magic != (2, 0):
+                arr = np.load(self.filename)
+                self.write(arr)
 
     def __create_header_bytes(self, spare_space = True):
         from struct import pack
