@@ -8,8 +8,7 @@ A quick utility to save dataframes as npy files.
 
 It supports append and checks lightly on column names matching and index.
 
-For simple read/write, it is about 5-10 times faster than parquet writing or pystore
-For append, it is marginally slower than pystore 
+For simple read/write/append, it is about 5-10 times faster than parquet writing or pystore. 
 
 ```
 import numpy as np; import pandas as pd
