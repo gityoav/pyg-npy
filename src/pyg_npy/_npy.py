@@ -7,6 +7,7 @@ import json
 from io import BytesIO, SEEK_END, SEEK_SET
 import datetime
 
+
 _npy = '.npy'
 _json = '.json'
 
