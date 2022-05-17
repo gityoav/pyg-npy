@@ -7,7 +7,6 @@ import json
 from io import BytesIO, SEEK_END, SEEK_SET
 import datetime
 
-
 _npy = '.npy'
 _json = '.json'
 
@@ -216,12 +215,15 @@ def np_save(path, value, mode = 'w'):
     if not value.flags.c_contiguous:
         value = np.ascontiguousarray(value)
     
+    mode = mode[0].lower()
     with NpyAppendArray(path) as f:
-        if mode == 'a':
+        if mode == 'a' and os.path.exists(path):
             f.make_file_appendable()
             f.append(value)
-        elif mode == 'w':
+        elif mode in 'wa':
             f.write(value)
+        else:
+            raise ValueError('mode "%s" needs to be "a" or "w"'%mode)
     return path
 
 def pd_to_npy(value, path, mode = 'w', check = True):
