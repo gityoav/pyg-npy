@@ -320,7 +320,8 @@ def pd_to_npy(value, path, mode = 'w', check = True):
     if path.endswith(_npy):
         path = path[:-len(_npy)]    
     
-    jname = path +'/%s%s'%('metadata', _json)    
+    jname = path +'/%s%s'%('metadata', _json)  
+    mode = mode[0].lower()
     if check and mode == 'a' and os.path.isfile(jname):
         with open(jname, 'r') as fp:
             j = json.load(fp)
