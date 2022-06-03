@@ -352,7 +352,7 @@ def pd_to_npy(value, path, mode = 'w', check = True):
 
 pd_to_npy.output = ['path', 'columns', 'index', 'latest']
 
-def pd_read_npy(path, columns = None, index = None, latest = None):
+def pd_read_npy(path, columns = None, index = None, latest = None, **kwargs):
     """
     reads a pandas dataframe/series from a path directory containing npy files
 
@@ -382,7 +382,7 @@ def pd_read_npy(path, columns = None, index = None, latest = None):
         index = index or j['index']    
     res = pd.DataFrame(data, index_data)
     res.index.name = index
-    if isinstance(columns, str):
+    if not isinstance(columns, (list, tuple)):
         res = res[0]
     else:
         res.columns = columns
