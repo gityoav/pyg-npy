@@ -37,6 +37,9 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+# notepad backup files
+*.bak
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
