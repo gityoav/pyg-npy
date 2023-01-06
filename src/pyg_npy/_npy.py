@@ -326,7 +326,6 @@ def pd_to_npy(value, path, mode = 'w', check = True):
         with open(jname, 'r') as fp:
             j = json.load(fp)
         assert j['columns'] == res['columns'], 'column names mismatch %s stored vs %s' %(j['columns'], res['columns'])
-        assert j['index'] == res['index'], 'index name mismatch %s stored vs %s' %(j['index'], res['index'])
         latest = j.get('latest')
         if latest:
             if isinstance(df.index, pd.DatetimeIndex):
@@ -351,6 +350,42 @@ def pd_to_npy(value, path, mode = 'w', check = True):
     return j
 
 pd_to_npy.output = ['path', 'columns', 'index', 'latest']
+
+
+def np_metadata(path):
+    """
+    returns the file metadata
+
+    Parameters
+    ----------
+    path : str
+        location of npy file.
+
+    Returns
+    -------
+    dict
+        metadata with 'columns', 'latest', 'path' and 'index'
+
+    """
+    if path.endswith(_npy):
+        path = path[:-len(_npy)]    
+    jname = path +'/%s%s'%('metadata', _json)  
+    with open(jname, 'r') as fp:
+        j = json.load(fp)
+    latest = j.get('latest')
+    if latest:
+        j['latest'] = datetime.datetime.utcfromtimestamp(latest)
+    return j
+
+np_metadata.output = ['path', 'columns', 'index', 'latest']
+
+
+def np_latest(path):
+    """
+    returns the latest date in the npy file without opening file
+    """
+    return np_metadata(path).get('latest')
+
 
 def pd_read_npy(path, columns = None, index = None, latest = None, **kwargs):
     """
