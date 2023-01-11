@@ -326,11 +326,15 @@ def pd_to_npy(value, path, mode = 'w', check = True):
         with open(jname, 'r') as fp:
             j = json.load(fp)
         assert j['columns'] == res['columns'], 'column names mismatch %s stored vs %s' %(j['columns'], res['columns'])
+        res['index'] = res['index'] or j['index']
+        assert j['index'] or res['index'] == res['index'], 'index name mismatch %s stored vs %s' %(j['index'], res['index'])        
         latest = j.get('latest')
         if latest:
             if isinstance(df.index, pd.DatetimeIndex):
                 latest = datetime.datetime.utcfromtimestamp(latest)
             df = df[df.index > latest]
+            if len(df) == 0: ## nothing to append
+                return j
     else:
         j = res
 
@@ -341,20 +345,29 @@ def pd_to_npy(value, path, mode = 'w', check = True):
         elif isinstance(df.index, pd.DatetimeIndex):
             latest = float(np.datetime64(latest).astype('uint64') / 1e6) ## utc
         j['latest'] = latest
+            
     dname = path +'/%s%s'%('data', _npy)
     iname = path +'/%s%s'%('index', _npy)
-    np_save(dname, df.values, mode)
-    np_save(iname, df.index.values, mode)
     with open(jname, 'w') as fp:
         json.dump(j, fp)
+    np_save(dname, df.values, mode)
+    try:
+        np_save(iname, df.index.values, mode)
+    except Exception as e: ## this is bad... we have appended to the index but we are now out of sync...
+        if mode == 'a': 
+            old = pd_read_npy(path, allow_async = True)
+            res = pd.concat([old, df])
+            return pd_to_npy(value, path, mode = 'w')
+        else:
+            raise e
     return j
 
 pd_to_npy.output = ['path', 'columns', 'index', 'latest']
 
 
-def np_metadata(path):
+def npy_metadata(path):
     """
-    returns the file metadata
+    returns the npy file metadata
 
     Parameters
     ----------
@@ -377,17 +390,18 @@ def np_metadata(path):
         j['latest'] = datetime.datetime.utcfromtimestamp(latest)
     return j
 
-np_metadata.output = ['path', 'columns', 'index', 'latest']
+
+npy_metadata.output = ['path', 'columns', 'index', 'latest']
 
 
-def np_latest(path):
+def npy_latest(path):
     """
     returns the latest date in the npy file without opening file
     """
-    return np_metadata(path).get('latest')
+    return npy_metadata(path).get('latest')
 
 
-def pd_read_npy(path, columns = None, index = None, latest = None, **kwargs):
+def pd_read_npy(path, columns = None, index = None, latest = None, allow_pickle = False, allow_async = False, **kwargs):
     """
     reads a pandas dataframe/series from a path directory containing npy files
 
@@ -399,6 +413,13 @@ def pd_read_npy(path, columns = None, index = None, latest = None, **kwargs):
         filenames for columns. If columns is a single str, assumes we want a pd.Series
     index : str/list of str
         column names used as indices
+    
+    allow_async: bool
+        If the data is synched from location that updates the files aynchronously, 
+        we can get the index file and the datafile records mismatch. when reading it.        
+        - index.npy and
+        - data.npy separately, 
+        we can have them mismatching in length
 
     Returns
     -------
@@ -407,14 +428,23 @@ def pd_read_npy(path, columns = None, index = None, latest = None, **kwargs):
     """
     if path.endswith(_npy):
         path = path[:-len(_npy)]
-    data = np.load(path +'/%s%s'%('data', _npy))
-    index_data = np.load(path +'/%s%s'%('index', _npy))
+    data = np.load(path +'/%s%s'%('data', _npy), allow_pickle = allow_pickle)
+    index_data = np.load(path +'/%s%s'%('index', _npy), allow_pickle = allow_pickle)
     jname = path +'/%s%s'%('metadata', _json)
     if os.path.isfile(jname):
         with open(jname, 'r') as fp:
             j = json.load(fp)
         columns = columns or j['columns']
-        index = index or j['index']    
+        index = index or j['index']
+    mismatch = len(data) - len(index_data)
+    if mismatch != 0:        
+        if allow_async is True or isinstance(allow_async, int) and abs(mismatch) <= allow_async:
+            if mismatch < 0: # data is shorter
+                index_data = index_data[:len(data)]
+            else:
+                data = data[:len(index_data)]
+        else:
+            raise ValueError(f'index data {len(index_data)} and dataframe data {len(data)} are not of same length')
     res = pd.DataFrame(data, index_data)
     res.index.name = index
     if not isinstance(columns, (list, tuple)):
