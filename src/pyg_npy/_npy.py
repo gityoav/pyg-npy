@@ -348,9 +348,9 @@ def pd_to_npy(value, path, mode = 'w', check = True):
             
     dname = path +'/%s%s'%('data', _npy)
     iname = path +'/%s%s'%('index', _npy)
+    np_save(dname, df.values, mode)
     with open(jname, 'w') as fp:
         json.dump(j, fp)
-    np_save(dname, df.values, mode)
     try:
         np_save(iname, df.index.values, mode)
     except Exception as e: ## this is bad... we have appended to the index but we are now out of sync...
