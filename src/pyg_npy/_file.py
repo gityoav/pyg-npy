@@ -23,6 +23,10 @@ def path_name(path):
         standard name.
 
     """
+    if len(path) == 1:
+        path = path + ':/'
+    elif len(path) == 2 and path.endswith(':'):
+        path = path + '/'
     path = path.replace('\\', '/')
     while '//' in path[2:]:
         path = path[:2] + path[2:].replace('//', '/')
